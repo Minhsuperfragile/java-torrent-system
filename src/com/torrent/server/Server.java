@@ -48,4 +48,13 @@ public interface Server extends Remote {
      * @throws RemoteException if there is a RMI related error
      */
     List<User> getAllUsers() throws RemoteException;
+
+    /**
+     * Returns the metadata of a shared file.
+     * 
+     * @param filename the name of the file
+     * @return the SharedFile metadata
+     * @throws RemoteException if there is a RMI related error
+     */
+    SharedFile getFileMetadata(String filename) throws RemoteException;
 }

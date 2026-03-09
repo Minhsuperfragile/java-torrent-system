@@ -13,11 +13,16 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+/**
+ * Implementation of the Server interface using RMI.
+ * Acts as a central directory to keep track of users and the files they share.
+ */
 public class ServerImpl extends UnicastRemoteObject implements Server {
+    /** Stores mapping from username to User object (IP, Port) */
     private final Map<String, User> userRegistry;
-    // Map of filename -> set of usernames who have this file
+    /** Stores mapping from filename to a set of usernames who currently share it */
     private final Map<String, Set<String>> fileToUsers;
-    // Map of username -> list of files they are sharing
+    /** Stores mapping from username to the list of files they are currently sharing */
     private final Map<String, List<SharedFile>> userToFiles;
 
     protected ServerImpl() throws RemoteException {
@@ -44,13 +49,14 @@ public class ServerImpl extends UnicastRemoteObject implements Server {
         }
         User removedUser = userRegistry.remove(username);
         if (removedUser != null) {
-            // Remove user from file listings
+            // Cleanup: remove the user from all file-sharing sets
             List<SharedFile> sharedFiles = userToFiles.remove(username);
             if (sharedFiles != null) {
                 for (SharedFile file : sharedFiles) {
                     Set<String> users = fileToUsers.get(file.getFilename());
                     if (users != null) {
                         users.remove(username);
+                        // If no one else has this file, remove the entry from global list
                         if (users.isEmpty()) {
                             fileToUsers.remove(file.getFilename());
                         }
@@ -69,7 +75,7 @@ public class ServerImpl extends UnicastRemoteObject implements Server {
             throw new RemoteException("User " + username + " not registered.");
         }
 
-        // Remove old entries for this user
+        // 1. Remove previous entries for this user to ensure we have a fresh list
         List<SharedFile> oldFiles = userToFiles.remove(username);
         if (oldFiles != null) {
             for (SharedFile oldFile : oldFiles) {
@@ -83,9 +89,10 @@ public class ServerImpl extends UnicastRemoteObject implements Server {
             }
         }
 
-        // Add new entries
+        // 2. Add new file listings
         userToFiles.put(username, new ArrayList<>(files));
         for (SharedFile file : files) {
+            // Update the global file-to-users map
             fileToUsers.computeIfAbsent(file.getFilename(), k -> ConcurrentHashMap.newKeySet()).add(username);
         }
         System.out.println("User " + username + " published " + files.size() + " files.");
@@ -103,5 +110,22 @@ public class ServerImpl extends UnicastRemoteObject implements Server {
     @Override
     public synchronized List<User> getAllUsers() throws RemoteException {
         return new ArrayList<>(userRegistry.values());
+    }
+
+    /**
+     * Searches all shared file lists to find the metadata (size, hashes) 
+     * for a given filename.
+     */
+    @Override
+    public synchronized SharedFile getFileMetadata(String filename) throws RemoteException {
+        // Linear search for metadata. In a larger system, this would be index-optimized.
+        for (List<SharedFile> files : userToFiles.values()) {
+            for (SharedFile file : files) {
+                if (file.getFilename().equals(filename)) {
+                    return file;
+                }
+            }
+        }
+        return null;
     }
 }
