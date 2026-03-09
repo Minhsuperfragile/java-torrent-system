@@ -1,0 +1,51 @@
+package com.torrent.server;
+
+import com.torrent.model.SharedFile;
+import com.torrent.model.User;
+import java.rmi.Remote;
+import java.rmi.RemoteException;
+import java.util.List;
+import java.util.Map;
+
+public interface Server extends Remote {
+    /**
+     * Registers a new user to the system.
+     * 
+     * @param user the User to register
+     * @throws RemoteException if there is a RMI related error
+     */
+    void registerUser(User user) throws RemoteException;
+
+    /**
+     * Unregisters a user from the system based on their username.
+     * 
+     * @param username the username of the user to unregister
+     * @throws RemoteException if there is a RMI related error
+     */
+    void unregisterUser(String username) throws RemoteException;
+
+    /**
+     * Publishes a list of files that a peer is sharing.
+     * 
+     * @param username the username of the peer
+     * @param files    the list of files being shared
+     * @throws RemoteException if there is a RMI related error
+     */
+    void publishFiles(String username, List<SharedFile> files) throws RemoteException;
+
+    /**
+     * Returns a map of all shared files and the users who possess them.
+     * 
+     * @return a map from filename to its list of users
+     * @throws RemoteException if there is a RMI related error
+     */
+    Map<String, List<String>> getFileLocations() throws RemoteException;
+
+    /**
+     * Returns a list of all registered users.
+     * 
+     * @return a list of Users
+     * @throws RemoteException if there is a RMI related error
+     */
+    List<User> getAllUsers() throws RemoteException;
+}
