@@ -55,8 +55,8 @@ public class Peer {
     public void start() {
         try {
             // Load configuration from .env or use defaults
-            String serverIp = ConfigLoader.get("SERVER_IP", "localhost");
-            int serverPort = ConfigLoader.getInt("SERVER_PORT", 2099);
+            String serverIp = ConfigLoader.get("CENTRAL_SERVER_IP", "localhost");
+            int serverPort = ConfigLoader.getInt("SERVER_PORT", 1999);
             String serviceName = ConfigLoader.get("SERVICE_NAME", "TorrentServer");
 
             // RMI Lookup: Get the remote Server object

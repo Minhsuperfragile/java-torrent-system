@@ -10,8 +10,8 @@ import java.util.Map;
 public class ListUsers {
     public static void main(String[] args) {
         try {
-            String serverIp = ConfigLoader.get("SERVER_IP", "localhost");
-            int serverPort = ConfigLoader.getInt("SERVER_PORT", 2099);
+            String serverIp = ConfigLoader.get("CENTRAL_SERVER_IP", "localhost");
+            int serverPort = ConfigLoader.getInt("SERVER_PORT", 1999);
             String serviceName = ConfigLoader.get("SERVICE_NAME", "TorrentServer");
 
             Registry registry = LocateRegistry.getRegistry(serverIp, serverPort);
