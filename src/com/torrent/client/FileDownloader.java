@@ -2,6 +2,7 @@ package com.torrent.client;
 
 import com.torrent.model.SharedFile;
 import com.torrent.model.User;
+import com.torrent.util.Benchmark;
 import com.torrent.util.FileUtil;
 import java.io.*;
 import java.net.Socket;
@@ -41,6 +42,9 @@ public class FileDownloader {
      * @return true if the entire file was downloaded and verified successfully.
      */
     public boolean download() {
+        Benchmark benchmark = new Benchmark(sharedFile.getFilename());
+        benchmark.start();
+        
         int totalPieces = sharedFile.getPieceHashes().size();
         System.out.println("Starting download of " + sharedFile.getFilename() + " (" + totalPieces + " pieces)");
         
@@ -115,7 +119,10 @@ public class FileDownloader {
 
         // 5. Final validation.
         if (completedPieces.size() == totalPieces) {
+            benchmark.stop();
             System.out.println("Download complete: " + sharedFile.getFilename());
+            System.out.println(benchmark.getFormattedSummary(sharedFile.getFileSize()));
+            
             // Verify full file hash to ensure no corruption occurred during assembly.
             try {
                 String downloadedHash = FileUtil.calculateFileHash(targetFile.getAbsolutePath());
