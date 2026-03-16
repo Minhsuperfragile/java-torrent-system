@@ -1,6 +1,6 @@
-# java-torrent-system
+# java-distributed-system
 
-This is a prototype of a torrent system, which is a distributed file sharing system. This system is built using Java and is intended to be used as a learning tool for understanding the fundamentals of distributed systems and file sharing. It will be much much simpler than a real torrent system, but it will demonstrate the basic concepts of peer-to-peer file sharing.
+This is a prototype of a distributed system, which is a distributed file sharing system. This system is built using Java and is intended to be used as a learning tool for understanding the fundamentals of distributed systems and file sharing. It will be much much simpler than a real distributed system, but it will demonstrate the basic concepts of peer-to-peer file sharing.
 
 ### Feature
 
@@ -11,8 +11,8 @@ This is a prototype of a torrent system, which is a distributed file sharing sys
 ### How the project organized
 
 - A centralized server is in `Server.java` and `ServerImpl.java`.
-- A deamon peer is in `Peer.java` and `PeerImpl.java`. The deamon peer is a background process that runs in the background and can be started by the user.
-- The file splitting and hashing is done in `FileUtil.java`.
+- A deamon peer is in `Peer.java` and `PeerImpl.java`. The deamon peer is a background process that runs in the background and can be started by the user. It will register itself to the server and can download/upload file to other peers.
+- A client app that have commands "list" and "download". 
 - The file splitting and hashing is done in `FileUtil.java`.
 - The file reassembly and verification is done in `FileUtil.java`.
 
@@ -27,34 +27,44 @@ Copy `.env.example` to `.env` and update the values:
 ```properties
 CENTRAL_SERVER_IP=192.168.100.120 # IP of the machine running the RMIServer
 SERVER_PORT=1999                 # Default port is 1999
-SERVICE_NAME=TorrentServer
+SERVICE_NAME=DistributedServer
 SERVER_PUBLIC_IP=192.168.100.120 # Your machine's LAN IP
 ```
 
 ### 3. Compilation
 From the root directory:
 ```bash
-javac -d bin -sourcepath src src/com/torrent/server/RMIServer.java src/com/torrent/client/Peer.java src/com/torrent/client/ListUsers.java
+javac -d bin -sourcepath src src/com/distributed/server/RMIServer.java src/com/distributed/client/PeerDaemon.java src/com/distributed/client/PeerCLI.java
 ```
 
 ### 4. Start the Centralized Server
 Run the RMI server first:
 ```bash
-java -cp bin com.torrent.server.RMIServer
+java -cp bin com.distributed.server.RMIServer
 ```
 
 ### 5. Start a Peer (Daemon)
-Open a new terminal and start a peer. You need to provide a **username** and a **local port** for file transfers:
+Open a new terminal and start a peer daemon. You need to provide a **username** and a **local P2P port**:
 ```bash
-java -cp bin com.torrent.client.Peer Alice 8080
+java -cp bin com.distributed.client.PeerDaemon Alice 8080
 ```
+- The daemon will also expose an RMI interface on default port 1998 for the CLI to connect.
 - Files you want to share should be placed in `./shared/Alice/`.
-- Files you download will also be saved there.
 
-### 6. List Registered Users and Files
-You can check the network status using the `ListUsers` utility:
+### 6. Control the Peer (CLI)
+Open another terminal to use the CLI:
 ```bash
-java -cp bin com.torrent.client.ListUsers
+# List all files available in the network
+java -cp bin com.distributed.client.PeerCLI list
+
+# Download a file
+java -cp bin com.distributed.client.PeerCLI download movie.mp4
+
+# Get daemon info
+java -cp bin com.distributed.client.PeerCLI info
+
+# Stop the daemon
+java -cp bin com.distributed.client.PeerCLI stop
 ```
 
 ## Network Exposure

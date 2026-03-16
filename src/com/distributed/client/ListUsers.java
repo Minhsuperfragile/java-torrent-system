@@ -1,7 +1,7 @@
-package com.torrent.client;
+package com.distributed.client;
 
-import com.torrent.server.Server;
-import com.torrent.util.ConfigLoader;
+import com.distributed.server.Server;
+import com.distributed.util.ConfigLoader;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.util.List;
@@ -12,7 +12,7 @@ public class ListUsers {
         try {
             String serverIp = ConfigLoader.get("CENTRAL_SERVER_IP", "localhost");
             int serverPort = ConfigLoader.getInt("SERVER_PORT", 1999);
-            String serviceName = ConfigLoader.get("SERVICE_NAME", "TorrentServer");
+            String serviceName = ConfigLoader.get("SERVICE_NAME", "DistributedServer");
 
             Registry registry = LocateRegistry.getRegistry(serverIp, serverPort);
             Server server = (Server) registry.lookup(serviceName);

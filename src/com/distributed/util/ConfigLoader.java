@@ -1,4 +1,4 @@
-package com.torrent.util;
+package com.distributed.util;
 
 import java.io.BufferedReader;
 import java.io.FileReader;

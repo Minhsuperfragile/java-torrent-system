@@ -1,6 +1,6 @@
-package com.torrent.client;
+package com.distributed.client;
 
-import com.torrent.util.FileUtil;
+import com.distributed.util.FileUtil;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;

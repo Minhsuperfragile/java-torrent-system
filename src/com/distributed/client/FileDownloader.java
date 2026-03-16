@@ -1,9 +1,9 @@
-package com.torrent.client;
+package com.distributed.client;
 
-import com.torrent.model.SharedFile;
-import com.torrent.model.User;
-import com.torrent.util.Benchmark;
-import com.torrent.util.FileUtil;
+import com.distributed.model.SharedFile;
+import com.distributed.model.User;
+import com.distributed.util.Benchmark;
+import com.distributed.util.FileUtil;
 import java.io.*;
 import java.net.Socket;
 import java.security.NoSuchAlgorithmException;

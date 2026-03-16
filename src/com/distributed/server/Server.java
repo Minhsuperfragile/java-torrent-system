@@ -1,7 +1,7 @@
-package com.torrent.server;
+package com.distributed.server;
 
-import com.torrent.model.SharedFile;
-import com.torrent.model.User;
+import com.distributed.model.SharedFile;
+import com.distributed.model.User;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.util.List;

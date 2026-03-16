@@ -1,4 +1,4 @@
-package com.torrent.util;
+package com.distributed.util;
 
 /**
  * Utility class for benchmarking tasks such as file downloads.

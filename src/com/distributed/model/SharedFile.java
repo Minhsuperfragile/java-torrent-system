@@ -1,4 +1,4 @@
-package com.torrent.model;
+package com.distributed.model;
 
 import java.io.Serializable;
 import java.util.List;

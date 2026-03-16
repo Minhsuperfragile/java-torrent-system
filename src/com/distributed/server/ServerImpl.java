@@ -1,7 +1,7 @@
-package com.torrent.server;
+package com.distributed.server;
 
-import com.torrent.model.SharedFile;
-import com.torrent.model.User;
+import com.distributed.model.SharedFile;
+import com.distributed.model.User;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
@@ -25,8 +25,8 @@ public class ServerImpl extends UnicastRemoteObject implements Server {
     /** Stores mapping from username to the list of files they are currently sharing */
     private final Map<String, List<SharedFile>> userToFiles;
 
-    protected ServerImpl() throws RemoteException {
-        super();
+    protected ServerImpl(int port) throws RemoteException {
+        super(port);
         this.userRegistry = new ConcurrentHashMap<>();
         this.fileToUsers = new ConcurrentHashMap<>();
         this.userToFiles = new ConcurrentHashMap<>();

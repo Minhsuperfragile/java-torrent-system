@@ -1,13 +1,13 @@
-package com.torrent.server;
+package com.distributed.server;
 
-import com.torrent.util.ConfigLoader;
+import com.distributed.util.ConfigLoader;
 import java.net.InetAddress;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 
 public class RMIServer {
     private static final int PORT = ConfigLoader.getInt("SERVER_PORT", 1999);
-    private static final String SERVICE_NAME = ConfigLoader.get("SERVICE_NAME", "TorrentServer");
+    private static final String SERVICE_NAME = ConfigLoader.get("SERVICE_NAME", "DistributedServer");
 
     public static void main(String[] args) {
         try {
@@ -16,7 +16,7 @@ public class RMIServer {
             String publicIp = ConfigLoader.get("SERVER_PUBLIC_IP", InetAddress.getLocalHost().getHostAddress());
             System.setProperty("java.rmi.server.hostname", publicIp);
 
-            Server server = new ServerImpl();
+            Server server = new ServerImpl(PORT);
             
             // Create an RMI registry on the configured port (listens on 0.0.0.0 by default)
             Registry registry = LocateRegistry.createRegistry(PORT);
@@ -25,7 +25,7 @@ public class RMIServer {
             registry.rebind(SERVICE_NAME, server);
 
             System.out.println("==============================================");
-            System.out.println("Torrent RMI Server is UP");
+            System.out.println("Distributed RMI Server is UP");
             System.out.println("Registry Port: " + PORT);
             System.out.println("Service Name: " + SERVICE_NAME);
             System.out.println("Exposed IP (Local): " + publicIp);
@@ -33,7 +33,7 @@ public class RMIServer {
             System.out.println("==============================================");
             
         } catch (Exception e) {
-            System.err.println("Torrent Server failed to start: " + e.toString());
+            System.err.println("Distributed Server failed to start: " + e.toString());
             e.printStackTrace();
         }
     }
