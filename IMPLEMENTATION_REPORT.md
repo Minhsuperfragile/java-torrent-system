@@ -28,7 +28,7 @@ Registry centralRegistry = LocateRegistry.getRegistry(serverIp, serverPort);
 centralServer = (Server) centralRegistry.lookup(serviceName);
 
 String localIp = InetAddress.getLocalHost().getHostAddress();
-User user = new User(username, localIp, p2pPort);
+User user = new User(username, localIp, port);
 centralServer.registerUser(user);
 ```
 
@@ -73,9 +73,8 @@ Every `PeerDaemon` runs a `FileTransferServer` (a `ServerSocket` listener) in a 
 ```java
 // FileTransferServer.java: Handling an incoming request
 try (ServerSocket serverSocket = new ServerSocket(port)) {
-    while (true) {
+    while (!Thread.currentThread().isInterrupted()) {
         Socket clientSocket = serverSocket.accept();
-        // Spawn a new thread for every incoming connection
         new Thread(new ClientHandler(clientSocket)).start();
     }
 }
@@ -95,9 +94,9 @@ When the user exits the daemon gracefully (e.g., Ctrl+C or a shutdown command), 
 Runtime.getRuntime().addShutdownHook(new Thread(() -> {
     try {
         centralServer.unregisterUser(username);
-        System.out.println("Cleanly unregistered from server.");
+        System.out.println("\nPeer unregistered from central server.");
     } catch (Exception e) {
-        // Handle RMI communication error
+        System.err.println("Failed to unregister: " + e.getMessage());
     }
 }));
 ```
@@ -113,7 +112,7 @@ If a peer crashes or the network drops mid-transfer, the system handles it with 
 // FileDownloader.java: Robust recovery logic
 } else {
     // Log failure and notify the downloader to refresh its directory
-    System.err.println("Piece " + pieceIndex + " failed, refreshing peer list...");
+    System.err.println("Failed to download piece " + pieceIndex + " from " + peer.getUsername() + ", refreshing peer list and retrying...");
     
     // Re-check directory from central server
     refreshPeers();
@@ -147,11 +146,14 @@ To prevent overloading a single popular peer, the system dynamically balances th
 ```java
 // Logic from FileDownloader.java
 private void refreshPeers() {
-    List<User> updatedPeers = peerProvider.get(); // Fetch from Directory
-    if (updatedPeers != null) {
-        // Sort by load (least busy first) to optimize source selection
-        updatedPeers.sort(Comparator.comparingInt(User::getLoad));
-        this.sourcePeers = new CopyOnWriteArrayList<>(updatedPeers);
+    if (peerProvider != null) {
+        List<User> updatedPeers = peerProvider.get();
+        if (updatedPeers != null && !updatedPeers.isEmpty()) {
+            // Sort by load (least busy first) to optimize source selection
+            updatedPeers.sort(Comparator.comparingInt(User::getLoad));
+            sourcePeers = new CopyOnWriteArrayList<>(updatedPeers);
+            System.out.println("Peer list refreshed. Now " + sourcePeers.size() + " peers available...");
+        }
     }
 }
 ```
