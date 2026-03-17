@@ -7,11 +7,15 @@ public class User implements Serializable {
     private String username;
     private String ipAddress;
     private int port;
+    private int load; // Number of active incoming transfers
+    private long lastHeartbeat; // Timestamp of last check-in
 
     public User(String username, String ipAddress, int port) {
         this.username = username;
         this.ipAddress = ipAddress;
         this.port = port;
+        this.load = 0;
+        this.lastHeartbeat = System.currentTimeMillis();
     }
 
     public String getUsername() {
@@ -36,6 +40,22 @@ public class User implements Serializable {
 
     public void setPort(int port) {
         this.port = port;
+    }
+
+    public int getLoad() {
+        return load;
+    }
+
+    public void setLoad(int load) {
+        this.load = load;
+    }
+
+    public long getLastHeartbeat() {
+        return lastHeartbeat;
+    }
+
+    public void setLastHeartbeat(long lastHeartbeat) {
+        this.lastHeartbeat = lastHeartbeat;
     }
 
     @Override

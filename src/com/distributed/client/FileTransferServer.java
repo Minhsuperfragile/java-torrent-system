@@ -6,6 +6,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 /**
  * A TCP server that listens for incoming file piece requests from other peers.
@@ -16,6 +18,10 @@ public class FileTransferServer implements Runnable {
     private final int port;
     /** The local directory where shared files are stored */
     private final String sharedFolderPath;
+    /** Tracks active incoming connections */
+    private final AtomicInteger activeConnections = new AtomicInteger(0);
+    /** Callback to notify when load changes */
+    private final Consumer<Integer> loadListener;
 
     /**
      * Constructs a new FileTransferServer.
@@ -23,9 +29,10 @@ public class FileTransferServer implements Runnable {
      * @param port             The port to bind the ServerSocket to.
      * @param sharedFolderPath The path to the folder containing files to share.
      */
-    public FileTransferServer(int port, String sharedFolderPath) {
+    public FileTransferServer(int port, String sharedFolderPath, Consumer<Integer> loadListener) {
         this.port = port;
         this.sharedFolderPath = sharedFolderPath;
+        this.loadListener = loadListener;
     }
 
     /**
@@ -59,6 +66,9 @@ public class FileTransferServer implements Runnable {
 
         @Override
         public void run() {
+            int currentLoad = activeConnections.incrementAndGet();
+            if (loadListener != null) loadListener.accept(currentLoad);
+
             try (DataInputStream dis = new DataInputStream(socket.getInputStream());
                  DataOutputStream dos = new DataOutputStream(socket.getOutputStream())) {
                 
@@ -100,6 +110,9 @@ public class FileTransferServer implements Runnable {
                     socket.close();
                 } catch (IOException e) {
                     // Ignore
+                } finally {
+                    int finalLoad = activeConnections.decrementAndGet();
+                    if (loadListener != null) loadListener.accept(finalLoad);
                 }
             }
         }

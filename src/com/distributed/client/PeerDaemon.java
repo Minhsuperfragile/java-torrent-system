@@ -54,7 +54,13 @@ public class PeerDaemon extends UnicastRemoteObject implements ClientInterface {
             User user = new User(username, localIp, port);
 
             // 3. Start TCP listener for file requests (P2P Server)
-            new Thread(new FileTransferServer(port, sharedFolderPath)).start();
+            new Thread(new FileTransferServer(port, sharedFolderPath, (currentLoad) -> {
+                try {
+                    centralServer.updateLoad(username, currentLoad);
+                } catch (RemoteException e) {
+                    System.err.println("Failed to update load on server: " + e.getMessage());
+                }
+            })).start();
 
             // 4. Register with Central Server
             centralServer.registerUser(user);
@@ -87,6 +93,22 @@ public class PeerDaemon extends UnicastRemoteObject implements ClientInterface {
             });
             publisherThread.setDaemon(true);
             publisherThread.start();
+
+            // 8. Heartbeat publisher (background thread)
+            Thread heartbeatThread = new Thread(() -> {
+                while (!Thread.currentThread().isInterrupted()) {
+                    try {
+                        Thread.sleep(30000); // Heartbeat every 30 seconds
+                        centralServer.heartbeat(username);
+                    } catch (InterruptedException e) {
+                        break;
+                    } catch (Exception e) {
+                        System.err.println("Heartbeat error: " + e.getMessage());
+                    }
+                }
+            });
+            heartbeatThread.setDaemon(true);
+            heartbeatThread.start();
 
             // Shutdown Hook: Cleanly unregister from server
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -143,31 +165,21 @@ public class PeerDaemon extends UnicastRemoteObject implements ClientInterface {
                     return;
                 }
 
-                Map<String, List<String>> locations = centralServer.getFileLocations();
-                List<String> usernames = locations.get(filename);
-                if (usernames == null || usernames.isEmpty()) {
-                    System.err.println("No peers found for: " + filename);
-                    return;
-                }
-
-                List<User> allUsers = centralServer.getAllUsers();
-                List<User> sourcePeers = new ArrayList<>();
-                for (String uname : usernames) {
-                    if (uname.equals(this.username)) continue;
-                    for (User u : allUsers) {
-                        if (u.getUsername().equals(uname)) {
-                            sourcePeers.add(u);
-                            break;
-                        }
-                    }
-                }
+                List<User> sourcePeers = getAvailablePeers(filename);
 
                 if (sourcePeers.isEmpty()) {
                     System.err.println("No other peers available for: " + filename);
                     return;
                 }
 
-                FileDownloader downloader = new FileDownloader(metadata, sourcePeers, sharedFolderPath);
+                FileDownloader downloader = new FileDownloader(metadata, sourcePeers, sharedFolderPath, () -> {
+                    try {
+                        return getAvailablePeers(filename);
+                    } catch (RemoteException e) {
+                        System.err.println("Failed to refresh peer list: " + e.getMessage());
+                        return null;
+                    }
+                });
                 if (downloader.download()) {
                     System.out.println("Download successful: " + filename);
                     publishSharedFiles();
@@ -194,6 +206,26 @@ public class PeerDaemon extends UnicastRemoteObject implements ClientInterface {
     public void shutdown() throws RemoteException {
         System.out.println("Shutdown request received from CLI.");
         System.exit(0);
+    }
+
+    private List<User> getAvailablePeers(String filename) throws RemoteException {
+        Map<String, List<String>> locations = centralServer.getFileLocations();
+        List<String> usernames = locations.get(filename);
+        List<User> sourcePeers = new ArrayList<>();
+
+        if (usernames != null) {
+            List<User> allUsers = centralServer.getAllUsers();
+            for (String uname : usernames) {
+                if (uname.equals(this.username)) continue;
+                for (User u : allUsers) {
+                    if (u.getUsername().equals(uname)) {
+                        sourcePeers.add(u);
+                        break;
+                    }
+                }
+            }
+        }
+        return sourcePeers;
     }
 
     public static void main(String[] args) {

@@ -10,6 +10,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 /**
  * Handles the logic for downloading a file from multiple peers in parallel.
@@ -19,7 +20,9 @@ public class FileDownloader {
     /** Metadata of the file to be downloaded */
     private final SharedFile sharedFile;
     /** List of peers known to have this file */
-    private final List<User> sourcePeers;
+    private volatile List<User> sourcePeers = new CopyOnWriteArrayList<>();
+    /** Supplier to refresh the list of peers from the central server */
+    private final Supplier<List<User>> peerProvider;
     /** Directory where the file will be saved */
     private final String downloadPath;
     /** Tracks which pieces have been successfully downloaded and verified */
@@ -29,10 +32,12 @@ public class FileDownloader {
     /** Concurrent download limit */
     private final int MAX_THREADS = 5;
 
-    public FileDownloader(SharedFile sharedFile, List<User> sourcePeers, String downloadPath) {
+    public FileDownloader(SharedFile sharedFile, List<User> initialPeers, String downloadPath, Supplier<List<User>> peerProvider) {
         this.sharedFile = sharedFile;
-        this.sourcePeers = sourcePeers;
+        initialPeers.sort(Comparator.comparingInt(User::getLoad));
+        this.sourcePeers.addAll(initialPeers);
         this.downloadPath = downloadPath;
+        this.peerProvider = peerProvider;
         this.executor = Executors.newFixedThreadPool(MAX_THREADS);
     }
 
@@ -89,7 +94,11 @@ public class FileDownloader {
                             System.out.println("Piece " + pieceIndex + " downloaded successfully from " + peer.getUsername());
                         } else {
                             // On failure (disconnect/hash mismatch), put back in queue for retry
-                            System.err.println("Failed to download piece " + pieceIndex + " from " + peer.getUsername() + ", retrying...");
+                            System.err.println("Failed to download piece " + pieceIndex + " from " + peer.getUsername() + ", refreshing peer list and retrying...");
+                            
+                            // Re-check directory from central server as requested
+                            refreshPeers();
+                            
                             synchronized (piecesToDownload) {
                                 piecesToDownload.add(pieceIndex);
                             }
@@ -144,11 +153,29 @@ public class FileDownloader {
     }
 
     /**
-     * Picks a random peer from the list of sources.
+     * Picks the best peer (least loaded) from the list of sources.
      */
     private User getRandomPeer() {
-        if (sourcePeers.isEmpty()) return null;
-        return sourcePeers.get(new Random().nextInt(sourcePeers.size()));
+        List<User> peers = sourcePeers;
+        if (peers.isEmpty()) return null;
+        
+        // Return the first peer (they are sorted by load in refreshPeers)
+        return peers.get(0);
+    }
+
+    /**
+     * Refreshes the list of source peers from the central server.
+     */
+    private void refreshPeers() {
+        if (peerProvider != null) {
+            List<User> updatedPeers = peerProvider.get();
+            if (updatedPeers != null && !updatedPeers.isEmpty()) {
+                // Sort by load (least busy first) to optimize source selection
+                updatedPeers.sort(Comparator.comparingInt(User::getLoad));
+                sourcePeers = new CopyOnWriteArrayList<>(updatedPeers);
+                System.out.println("Peer list refreshed. Now " + sourcePeers.size() + " peers available. Best peer: " + sourcePeers.get(0).getUsername() + " (Load: " + sourcePeers.get(0).getLoad() + ")");
+            }
+        }
     }
 
     /**

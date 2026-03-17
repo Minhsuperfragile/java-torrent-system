@@ -57,4 +57,20 @@ public interface Server extends Remote {
      * @throws RemoteException if there is a RMI related error
      */
     SharedFile getFileMetadata(String filename) throws RemoteException;
+    /**
+     * Updates the heartbeat timestamp for a peer to keep them active in the directory.
+     * 
+     * @param username the username of the peer
+     * @throws RemoteException if there is a RMI related error
+     */
+    void heartbeat(String username) throws RemoteException;
+
+    /**
+     * Updates the current load (active transfers) for a peer.
+     * 
+     * @param username the username of the peer
+     * @param load     the number of active incoming transfers
+     * @throws RemoteException if there is a RMI related error
+     */
+    void updateLoad(String username, int load) throws RemoteException;
 }

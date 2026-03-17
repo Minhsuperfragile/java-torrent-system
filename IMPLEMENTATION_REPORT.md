@@ -102,26 +102,56 @@ Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 }));
 ```
 
-### Dirty Disconnection (Socket Failures)
-If a peer crashes or the network drops mid-transfer, the system handles it at the socket level:
+### Dirty Disconnection and Automatic Resumption
+If a peer crashes or the network drops mid-transfer, the system handles it with a multi-layered recovery strategy:
 
-1. **Timeouts:** `socket.setSoTimeout(5000)` prevents the downloader from hanging indefinitely if a peer becomes unresponsive.
-2. **Retries:** If `downloadPiece` throws an `IOException` (connection reset, timeout, etc.), the `FileDownloader` catches the exception and puts that specific piece back into the `piecesToDownload` queue for another peer to pick up.
+1. **Socket-Level Timeouts:** `socket.setSoTimeout(5000)` prevents the downloader from hanging indefinitely if a peer becomes unresponsive.
+2. **Dynamic Peer Refreshing:** If a download fails, the `FileDownloader` uses a `Supplier<List<User>>` to re-query the central server for an updated list of peers possessing the file. This ensures that if a peer has gone offline permanently, it is removed from the local list of sources.
+3. **Automatic Task Re-queuing:** The failed piece index is added back to the `piecesToDownload` queue. The asynchronous scheduler then picks a new peer from the refreshed list and attempts the download again.
 
 ```java
-// FileDownloader.java: Retry logic
-try {
-    if (downloadPiece(peer, pieceIndex)) {
-        completedPieces.put(pieceIndex, true);
-    } else {
-        // Generic failure, put back in queue
+// FileDownloader.java: Robust recovery logic
+} else {
+    // Log failure and notify the downloader to refresh its directory
+    System.err.println("Piece " + pieceIndex + " failed, refreshing peer list...");
+    
+    // Re-check directory from central server
+    refreshPeers();
+    
+    // Put back in queue for retry with a potentially different peer
+    synchronized (piecesToDownload) {
         piecesToDownload.add(pieceIndex);
     }
-} catch (Exception e) {
-    // Network error: log and retry piece
-    piecesToDownload.add(pieceIndex);
 }
 ```
 
 ## 4. Data Integrity
 Every file is split into fixed-size pieces (e.g., 1MB). Before writing a piece to disk, the downloader calculates its `SHA-256` hash and compares it against the metadata received from the central server. This ensures that even if a peer sends corrupt data (either maliciously or due to network noise), the system will detect it and retry the download.
+
+---
+
+## 5. Dynamic Adaptation and Load Balancing
+
+The system implements advanced directory features to ensure the peer list remains fresh and downloads are optimized for network conditions.
+
+### A. Heartbeat System (Liveness Detection)
+To detect "dirty" disconnections where a peer crashes without unregistering, the system uses a **Heartbeat Mechanism**:
+1. **Peers:** Every `PeerDaemon` runs a background thread that sends a small "liveness" signal to the central server every 30 seconds.
+2. **Server:** The `ServerImpl` runs a "Janitor" thread that scans the registry every 30 seconds. If a peer has not sent a heartbeat for more than 90 seconds, it is automatically pruned from the directory.
+
+### B. Load-Aware Peer Selection
+To prevent overloading a single popular peer, the system dynamically balances the download load:
+1. **Load Reporting:** The `FileTransferServer` tracks the number of active incoming connections. Every time a connection starts or ends, it notifies the central server of its current `load`.
+2. **Preference Strategy:** When a `FileDownloader` fetches a peer list, it sorts the peers by their current load (least busy first). The downloader always attempts to connect to the peer with the lowest number of active transfers.
+
+```java
+// Logic from FileDownloader.java
+private void refreshPeers() {
+    List<User> updatedPeers = peerProvider.get(); // Fetch from Directory
+    if (updatedPeers != null) {
+        // Sort by load (least busy first) to optimize source selection
+        updatedPeers.sort(Comparator.comparingInt(User::getLoad));
+        this.sourcePeers = new CopyOnWriteArrayList<>(updatedPeers);
+    }
+}
+```

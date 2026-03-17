@@ -30,6 +30,7 @@ public class ServerImpl extends UnicastRemoteObject implements Server {
         this.userRegistry = new ConcurrentHashMap<>();
         this.fileToUsers = new ConcurrentHashMap<>();
         this.userToFiles = new ConcurrentHashMap<>();
+        startJanitor();
     }
 
     @Override
@@ -127,5 +128,49 @@ public class ServerImpl extends UnicastRemoteObject implements Server {
             }
         }
         return null;
+    }
+    @Override
+    public synchronized void heartbeat(String username) throws RemoteException {
+        User user = userRegistry.get(username);
+        if (user != null) {
+            user.setLastHeartbeat(System.currentTimeMillis());
+        }
+    }
+
+    @Override
+    public synchronized void updateLoad(String username, int load) throws RemoteException {
+        User user = userRegistry.get(username);
+        if (user != null) {
+            user.setLoad(load);
+        }
+    }
+
+    private void startJanitor() {
+        Thread janitorThread = new Thread(() -> {
+            while (!Thread.currentThread().isInterrupted()) {
+                try {
+                    Thread.sleep(30000); // Check every 30 seconds
+                    long now = System.currentTimeMillis();
+                    List<String> staleUsers = new ArrayList<>();
+                    
+                    userRegistry.forEach((username, user) -> {
+                        if (now - user.getLastHeartbeat() > 90000) { // 90 seconds timeout
+                            staleUsers.add(username);
+                        }
+                    });
+
+                    for (String username : staleUsers) {
+                        System.out.println("Janitor: Pruning stale user " + username);
+                        unregisterUser(username);
+                    }
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Exception e) {
+                    System.err.println("Janitor error: " + e.getMessage());
+                }
+            }
+        });
+        janitorThread.setDaemon(true);
+        janitorThread.start();
     }
 }
