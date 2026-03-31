@@ -10,43 +10,38 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /**
- * A TCP server that listens for incoming file piece requests from other peers.
- * Each request is handled in a separate thread.
+ * Dedicated TCP server for handling outgoing file piece requests.
+ * Runs in the background of every PeerDaemon to allow other peers to download.
  */
 public class FileTransferServer implements Runnable {
-    /** The port on which to listen for TCP connections */
+
+    /** Port number to listen for incoming TCP connections */
     private final int port;
-    /** The local directory where shared files are stored */
+
+    /** Path to the folder containing locally shared files */
     private final String sharedFolderPath;
-    /** Tracks active incoming connections */
+
+    /** Current number of active client connections */
     private final AtomicInteger activeConnections = new AtomicInteger(0);
-    /** Callback to notify when load changes */
+
+    /** Callback to notify the PeerDaemon of load changes */
     private final Consumer<Integer> loadListener;
 
-    /**
-     * Constructs a new FileTransferServer.
-     * 
-     * @param port             The port to bind the ServerSocket to.
-     * @param sharedFolderPath The path to the folder containing files to share.
-     */
     public FileTransferServer(int port, String sharedFolderPath, Consumer<Integer> loadListener) {
         this.port = port;
         this.sharedFolderPath = sharedFolderPath;
         this.loadListener = loadListener;
     }
 
-    /**
-     * The main server loop. Accepts incoming socket connections and 
-     * delegates them to ClientHandler threads.
-     */
     @Override
     public void run() {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("File Transfer Server started on port " + port);
             while (!Thread.currentThread().isInterrupted()) {
-                // Wait for a peer to connect
+                // Wait for an incoming connection from a peer wanting to download
                 Socket clientSocket = serverSocket.accept();
-                // Handle each request in a new thread for concurrency
+
+                // Spawn a handler thread so multiple peers can download simultaneously
                 new Thread(new ClientHandler(clientSocket)).start();
             }
         } catch (IOException e) {
@@ -55,7 +50,7 @@ public class FileTransferServer implements Runnable {
     }
 
     /**
-     * Inner class to handle a single peer's request for a file piece.
+     * Handles a single peer's request for a file piece.
      */
     private class ClientHandler implements Runnable {
         private final Socket socket;
@@ -66,39 +61,41 @@ public class FileTransferServer implements Runnable {
 
         @Override
         public void run() {
+            // Increment load and notify the daemon (which notifies the central server)
             int currentLoad = activeConnections.incrementAndGet();
-            if (loadListener != null) loadListener.accept(currentLoad);
+            if (loadListener != null)
+                loadListener.accept(currentLoad);
 
             try (DataInputStream dis = new DataInputStream(socket.getInputStream());
-                 DataOutputStream dos = new DataOutputStream(socket.getOutputStream())) {
-                
-                // 1. Read the requested filename and piece index from the peer
+                    DataOutputStream dos = new DataOutputStream(socket.getOutputStream())) {
+
+                // Read request: [FileName] + [PieceIndex]
                 String filename = dis.readUTF();
                 int pieceIndex = dis.readInt();
-                
-                System.out.println("Received request for " + filename + " piece " + pieceIndex + " from " + socket.getInetAddress());
 
-                // 2. Locate the file in the shared folder
+                System.out.println("Received request for " + filename + " piece " + pieceIndex + " from "
+                        + socket.getInetAddress());
+
+                // Find the file in our local shared folder
                 Path filePath = Paths.get(sharedFolderPath, filename);
                 File file = filePath.toFile();
-                
-                // 3. If file exists, read the specific piece and send it back
+
                 if (file.exists() && file.isFile()) {
+                    // Read the specific chunk from disk
                     byte[] pieceData = FileUtil.readPiece(file.getAbsolutePath(), pieceIndex);
                     if (pieceData != null) {
-                        // Send piece length first so receiver knows how much to read
+                        // Send [Length] + [Bytes]
                         dos.writeInt(pieceData.length);
-                        // Send the actual raw bytes
                         dos.write(pieceData);
                         dos.flush();
                         System.out.println("Sent piece " + pieceIndex + " of " + filename);
                     } else {
-                        // Send -1 to indicate piece index is out of bounds
+                        // Notify peer that piece index is invalid
                         dos.writeInt(-1);
                         System.out.println("Piece " + pieceIndex + " of " + filename + " not found (out of bounds)");
                     }
                 } else {
-                    // Send -1 to indicate file does not exist locally
+                    // Notify peer that the file is missing
                     dos.writeInt(-1);
                     System.out.println("File " + filename + " not found in shared folder");
                 }
@@ -106,13 +103,14 @@ public class FileTransferServer implements Runnable {
                 System.err.println("Error handling client request: " + e.getMessage());
             } finally {
                 try {
-                    // Always close the socket after the transaction is complete
                     socket.close();
                 } catch (IOException e) {
-                    // Ignore
+                    // Ignore close errors
                 } finally {
+                    // Decrement load when transfer is finished
                     int finalLoad = activeConnections.decrementAndGet();
-                    if (loadListener != null) loadListener.accept(finalLoad);
+                    if (loadListener != null)
+                        loadListener.accept(finalLoad);
                 }
             }
         }

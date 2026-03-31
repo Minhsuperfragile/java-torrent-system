@@ -7,6 +7,10 @@ import java.rmi.registry.Registry;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Standalone utility to list registered users and available files.
+ * Directly queries the central RMI registry without needing a daemon.
+ */
 public class ListUsers {
     public static void main(String[] args) {
         try {

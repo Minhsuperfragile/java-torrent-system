@@ -7,70 +7,49 @@ import java.rmi.RemoteException;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Remote interface for the central directory server.
+ * Defines methods for peer registration, metadata publishing, and discovery.
+ */
 public interface Server extends Remote {
+     
     /**
-     * Registers a new user to the system.
-     * 
-     * @param user the User to register
-     * @throws RemoteException if there is a RMI related error
+     * Registers a new peer in the system.
      */
     void registerUser(User user) throws RemoteException;
 
     /**
-     * Unregisters a user from the system based on their username.
-     * 
-     * @param username the username of the user to unregister
-     * @throws RemoteException if there is a RMI related error
+     * Removes a peer and their shared files from the registry.
      */
     void unregisterUser(String username) throws RemoteException;
 
     /**
-     * Publishes a list of files that a peer is sharing.
-     * 
-     * @param username the username of the peer
-     * @param files    the list of files being shared
-     * @throws RemoteException if there is a RMI related error
+     * Updates the list of files being shared by a specific user.
      */
     void publishFiles(String username, List<SharedFile> files) throws RemoteException;
 
     /**
-     * Returns a map of all shared files and the users who possess them.
-     * 
-     * @return a map from filename to its list of users
-     * @throws RemoteException if there is a RMI related error
+     * Returns a map of filenames to lists of usernames who possess that file.
      */
     Map<String, List<String>> getFileLocations() throws RemoteException;
 
     /**
-     * Returns a list of all registered users.
-     * 
-     * @return a list of Users
-     * @throws RemoteException if there is a RMI related error
+     * Returns a list of all currently registered peers.
      */
     List<User> getAllUsers() throws RemoteException;
 
     /**
-     * Returns the metadata of a shared file.
-     * 
-     * @param filename the name of the file
-     * @return the SharedFile metadata
-     * @throws RemoteException if there is a RMI related error
+     * Retrieves full metadata (hashes, size) for a specific file.
      */
     SharedFile getFileMetadata(String filename) throws RemoteException;
+
     /**
-     * Updates the heartbeat timestamp for a peer to keep them active in the directory.
-     * 
-     * @param username the username of the peer
-     * @throws RemoteException if there is a RMI related error
+     * Updates the liveness timestamp for a user.
      */
     void heartbeat(String username) throws RemoteException;
 
     /**
-     * Updates the current load (active transfers) for a peer.
-     * 
-     * @param username the username of the peer
-     * @param load     the number of active incoming transfers
-     * @throws RemoteException if there is a RMI related error
+     * Updates the current connection load for a user (used for load balancing).
      */
     void updateLoad(String username, int load) throws RemoteException;
 }

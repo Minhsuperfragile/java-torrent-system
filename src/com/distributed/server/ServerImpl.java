@@ -14,15 +14,21 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
- * Implementation of the Server interface using RMI.
- * Acts as a central directory to keep track of users and the files they share.
+ * Implementation of the remote Server interface.
+ * Manages the global state of the P2P network using thread-safe collections.
  */
 public class ServerImpl extends UnicastRemoteObject implements Server {
-    /** Stores mapping from username to User object (IP, Port) */
+
+    /** Maps usernames to User objects containing connection info and status */
     private final Map<String, User> userRegistry;
-    /** Stores mapping from filename to a set of usernames who currently share it */
+
+    /** Maps filenames to a set of usernames who have the file (for discovery) */
     private final Map<String, Set<String>> fileToUsers;
-    /** Stores mapping from username to the list of files they are currently sharing */
+
+    /**
+     * Maps usernames to the list of files they are currently sharing (for metadata
+     * management)
+     */
     private final Map<String, List<SharedFile>> userToFiles;
 
     protected ServerImpl(int port) throws RemoteException {
@@ -50,14 +56,14 @@ public class ServerImpl extends UnicastRemoteObject implements Server {
         }
         User removedUser = userRegistry.remove(username);
         if (removedUser != null) {
-            // Cleanup: remove the user from all file-sharing sets
+
             List<SharedFile> sharedFiles = userToFiles.remove(username);
             if (sharedFiles != null) {
                 for (SharedFile file : sharedFiles) {
                     Set<String> users = fileToUsers.get(file.getFilename());
                     if (users != null) {
                         users.remove(username);
-                        // If no one else has this file, remove the entry from global list
+
                         if (users.isEmpty()) {
                             fileToUsers.remove(file.getFilename());
                         }
@@ -76,7 +82,6 @@ public class ServerImpl extends UnicastRemoteObject implements Server {
             throw new RemoteException("User " + username + " not registered.");
         }
 
-        // 1. Remove previous entries for this user to ensure we have a fresh list
         List<SharedFile> oldFiles = userToFiles.remove(username);
         if (oldFiles != null) {
             for (SharedFile oldFile : oldFiles) {
@@ -90,10 +95,9 @@ public class ServerImpl extends UnicastRemoteObject implements Server {
             }
         }
 
-        // 2. Add new file listings
         userToFiles.put(username, new ArrayList<>(files));
         for (SharedFile file : files) {
-            // Update the global file-to-users map
+
             fileToUsers.computeIfAbsent(file.getFilename(), k -> ConcurrentHashMap.newKeySet()).add(username);
         }
         System.out.println("User " + username + " published " + files.size() + " files.");
@@ -113,13 +117,9 @@ public class ServerImpl extends UnicastRemoteObject implements Server {
         return new ArrayList<>(userRegistry.values());
     }
 
-    /**
-     * Searches all shared file lists to find the metadata (size, hashes) 
-     * for a given filename.
-     */
     @Override
     public synchronized SharedFile getFileMetadata(String filename) throws RemoteException {
-        // Linear search for metadata. In a larger system, this would be index-optimized.
+
         for (List<SharedFile> files : userToFiles.values()) {
             for (SharedFile file : files) {
                 if (file.getFilename().equals(filename)) {
@@ -129,6 +129,7 @@ public class ServerImpl extends UnicastRemoteObject implements Server {
         }
         return null;
     }
+
     @Override
     public synchronized void heartbeat(String username) throws RemoteException {
         User user = userRegistry.get(username);
@@ -145,32 +146,44 @@ public class ServerImpl extends UnicastRemoteObject implements Server {
         }
     }
 
+    /**
+     * Starts a background maintenance thread (Janitor) that prunes peers
+     * who haven't sent a heartbeat within the timeout period (90 seconds).
+     */
     private void startJanitor() {
         Thread janitorThread = new Thread(() -> {
             while (!Thread.currentThread().isInterrupted()) {
                 try {
-                    Thread.sleep(30000); // Check every 30 seconds
+                    // Check every 30 seconds
+                    Thread.sleep(30000);
                     long now = System.currentTimeMillis();
                     List<String> staleUsers = new ArrayList<>();
-                    
+
                     userRegistry.forEach((username, user) -> {
-                        if (now - user.getLastHeartbeat() > 90000) { // 90 seconds timeout
+                        long diff = now - user.getLastHeartbeat();
+                        // If no heartbeat for > 90s, mark for removal
+                        if (diff > 90000) {
                             staleUsers.add(username);
                         }
                     });
 
                     for (String username : staleUsers) {
-                        System.out.println("Janitor: Pruning stale user " + username);
-                        unregisterUser(username);
+                        User user = userRegistry.get(username);
+                        if (user != null) {
+                            System.out.println("Janitor: Pruning stale user " + username + " (Last heartbeat: "
+                                    + (now - user.getLastHeartbeat()) / 1000 + "s ago)");
+                            unregisterUser(username); // Cleanly remove their records
+                        }
                     }
                 } catch (InterruptedException e) {
                     break;
                 } catch (Exception e) {
                     System.err.println("Janitor error: " + e.getMessage());
+                    e.printStackTrace();
                 }
             }
         });
-        janitorThread.setDaemon(true);
+        janitorThread.setDaemon(true); // Don't prevent JVM shutdown
         janitorThread.start();
     }
 }

@@ -6,7 +6,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * CLI application that connects to a local PeerDaemon.
+ * Command-line interface for interacting with a PeerDaemon.
+ * Communicates with the local daemon via RMI to trigger downloads or list
+ * files.
  */
 public class PeerCLI {
     public static void main(String[] args) {
@@ -15,18 +17,16 @@ public class PeerCLI {
             return;
         }
 
-        // We assume the daemon is on localhost. 
-        // We can optionally pass the RMI port as an argument or use default 1998.
         int rmiPort = com.distributed.util.ConfigLoader.getInt("CLIENT_RMI_PORT", 1998);
         int commandStartIndex = 0;
 
-        // Check if the first argument is a port number (optional)
         try {
             if (args.length > 1 && args[0].matches("\\d+")) {
                 rmiPort = Integer.parseInt(args[0]);
                 commandStartIndex = 1;
             }
-        } catch (NumberFormatException ignored) {}
+        } catch (NumberFormatException ignored) {
+        }
 
         if (commandStartIndex >= args.length) {
             printUsage();
@@ -47,7 +47,8 @@ public class PeerCLI {
                         System.out.println("No files found.");
                     } else {
                         locations.forEach((filename, users) -> {
-                            System.out.println(" - " + filename + " (available from: " + String.join(", ", users) + ")");
+                            System.out
+                                    .println(" - " + filename + " (available from: " + String.join(", ", users) + ")");
                         });
                     }
                     break;

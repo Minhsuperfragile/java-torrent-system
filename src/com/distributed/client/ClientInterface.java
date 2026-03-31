@@ -5,29 +5,30 @@ import java.rmi.RemoteException;
 import java.util.List;
 import java.util.Map;
 
+ 
 /**
- * Remote interface for the Peer Daemon.
- * Allows a CLI client to communicate with the background daemon process.
+ * Remote interface for the PeerDaemon.
+ * Allows external processes (like PeerCLI) to control the daemon via RMI.
  */
 public interface ClientInterface extends Remote {
+     
     /**
-     * Instructs the daemon to start downloading a file.
+     * Triggers a file download for the specified filename.
      */
     void downloadFile(String filename) throws RemoteException;
 
     /**
-     * Queries the daemon for available files in the network.
-     * @return A map of filename to list of usernames sharing it.
+     * Retrieves the map of all files and their providers from the central server.
      */
     Map<String, List<String>> getFileLocations() throws RemoteException;
 
     /**
-     * Returns the username of this peer.
+     * Returns the username associated with this daemon instance.
      */
     String getUsername() throws RemoteException;
 
     /**
-     * Shuts down the daemon process.
+     * Gracefully shuts down the daemon process.
      */
     void shutdown() throws RemoteException;
 }

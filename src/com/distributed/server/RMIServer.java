@@ -5,23 +5,29 @@ import java.net.InetAddress;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 
+/**
+ * Entry point for the central RMI Server.
+ * Initializes the RMI registry and binds the DistributedServer service.
+ */
 public class RMIServer {
+    /** Port for the RMI registry, defaults to 1999 if not in .env */
     private static final int PORT = ConfigLoader.getInt("SERVER_PORT", 1999);
+    /** Name used to identify the service in the RMI registry */
     private static final String SERVICE_NAME = ConfigLoader.get("SERVICE_NAME", "DistributedServer");
 
     public static void main(String[] args) {
         try {
-            // Important for RMI: Tell the system WHICH IP to broadcast to clients.
-            // If you are on a LAN, this should be your 192.168.x.x address.
+            
+            
             String publicIp = ConfigLoader.get("SERVER_PUBLIC_IP", InetAddress.getLocalHost().getHostAddress());
             System.setProperty("java.rmi.server.hostname", publicIp);
 
             Server server = new ServerImpl(PORT);
             
-            // Create an RMI registry on the configured port (listens on 0.0.0.0 by default)
+            
             Registry registry = LocateRegistry.createRegistry(PORT);
             
-            // Bind the remote object's stub in the registry
+            
             registry.rebind(SERVICE_NAME, server);
 
             System.out.println("==============================================");

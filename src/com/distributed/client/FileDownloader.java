@@ -31,8 +31,11 @@ public class FileDownloader {
     private final ExecutorService executor;
     /** Concurrent download limit */
     private final int MAX_THREADS = 5;
+    /** For random peer selection */
+    private static final Random random = new Random();
 
-    public FileDownloader(SharedFile sharedFile, List<User> initialPeers, String downloadPath, Supplier<List<User>> peerProvider) {
+    public FileDownloader(SharedFile sharedFile, List<User> initialPeers, String downloadPath,
+            Supplier<List<User>> peerProvider) {
         this.sharedFile = sharedFile;
         initialPeers.sort(Comparator.comparingInt(User::getLoad));
         this.sourcePeers.addAll(initialPeers);
@@ -49,12 +52,12 @@ public class FileDownloader {
     public boolean download() {
         Benchmark benchmark = new Benchmark(sharedFile.getFilename());
         benchmark.start();
-        
+
         int totalPieces = sharedFile.getPieceHashes().size();
         System.out.println("Starting download of " + sharedFile.getFilename() + " (" + totalPieces + " pieces)");
-        
+
         File targetFile = new File(downloadPath, sharedFile.getFilename());
-        
+
         // 1. Pre-allocate the file on disk with the expected total size.
         // This ensures enough space and allows writing pieces at any offset.
         try (RandomAccessFile raf = new RandomAccessFile(targetFile, "rw")) {
@@ -76,14 +79,14 @@ public class FileDownloader {
         while (completedPieces.size() < totalPieces) {
             if (!piecesToDownload.isEmpty() && activeDownloads.get() < MAX_THREADS) {
                 int pieceIndex = piecesToDownload.poll();
-                
+
                 // Randomly select a peer for this specific piece to balance network load.
                 User peer = getRandomPeer();
                 if (peer == null) {
                     System.err.println("No peers available for download");
                     break;
                 }
-                
+
                 activeDownloads.incrementAndGet();
                 // Submit download task to thread pool
                 executor.submit(() -> {
@@ -91,14 +94,16 @@ public class FileDownloader {
                         if (downloadPiece(peer, pieceIndex, targetFile)) {
                             // Mark as complete if hash matches
                             completedPieces.put(pieceIndex, true);
-                            System.out.println("Piece " + pieceIndex + " downloaded successfully from " + peer.getUsername());
+                            System.out.println(
+                                    "Piece " + pieceIndex + " downloaded successfully from " + peer.getUsername());
                         } else {
                             // On failure (disconnect/hash mismatch), put back in queue for retry
-                            System.err.println("Failed to download piece " + pieceIndex + " from " + peer.getUsername() + ", refreshing peer list and retrying...");
-                            
+                            System.err.println("Failed to download piece " + pieceIndex + " from " + peer.getUsername()
+                                    + ", refreshing peer list and retrying...");
+
                             // Re-check directory from central server as requested
                             refreshPeers();
-                            
+
                             synchronized (piecesToDownload) {
                                 piecesToDownload.add(pieceIndex);
                             }
@@ -131,7 +136,7 @@ public class FileDownloader {
             benchmark.stop();
             System.out.println("Download complete: " + sharedFile.getFilename());
             System.out.println(benchmark.getFormattedSummary(sharedFile.getFileSize()));
-            
+
             // Verify full file hash to ensure no corruption occurred during assembly.
             try {
                 String downloadedHash = FileUtil.calculateFileHash(targetFile.getAbsolutePath());
@@ -147,7 +152,8 @@ public class FileDownloader {
                 return false;
             }
         } else {
-            System.err.println("Download failed: only " + completedPieces.size() + "/" + totalPieces + " pieces downloaded.");
+            System.err.println(
+                    "Download failed: only " + completedPieces.size() + "/" + totalPieces + " pieces downloaded.");
             return false;
         }
     }
@@ -155,12 +161,25 @@ public class FileDownloader {
     /**
      * Picks the best peer (least loaded) from the list of sources.
      */
+    /**
+     * Picks a peer from the top 5 least loaded sources.
+     * We pick randomly among the top candidates to distribute work in parallel.
+     */
     private User getRandomPeer() {
         List<User> peers = sourcePeers;
-        if (peers.isEmpty()) return null;
-        
-        // Return the first peer (they are sorted by load in refreshPeers)
-        return peers.get(0);
+        if (peers.isEmpty())
+            return null;
+
+        // Ensure the list is sorted by load (it usually is from refreshPeers, but just
+        // in case)
+        // Note: For extreme efficiency with many peers, we'd avoid sorting every time,
+        // but here we only have a handful.
+
+        // Only consider the top 5 BEST (least loaded) peers
+        int poolSize = Math.min(peers.size(), 5);
+
+        // Randomly pick from these top candidates to ensure parallel downloads
+        return peers.get(random.nextInt(poolSize));
     }
 
     /**
@@ -173,7 +192,8 @@ public class FileDownloader {
                 // Sort by load (least busy first) to optimize source selection
                 updatedPeers.sort(Comparator.comparingInt(User::getLoad));
                 sourcePeers = new CopyOnWriteArrayList<>(updatedPeers);
-                System.out.println("Peer list refreshed. Now " + sourcePeers.size() + " peers available. Best peer: " + sourcePeers.get(0).getUsername() + " (Load: " + sourcePeers.get(0).getLoad() + ")");
+                System.out.println("Peer list refreshed. Now " + sourcePeers.size() + " peers available. Best peer: "
+                        + sourcePeers.get(0).getUsername() + " (Load: " + sourcePeers.get(0).getLoad() + ")");
             }
         }
     }
@@ -189,11 +209,11 @@ public class FileDownloader {
      */
     private boolean downloadPiece(User peer, int pieceIndex, File targetFile) {
         try (Socket socket = new Socket(peer.getIpAddress(), peer.getPort());
-             DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
-             DataInputStream dis = new DataInputStream(socket.getInputStream())) {
-            
+                DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
+                DataInputStream dis = new DataInputStream(socket.getInputStream())) {
+
             // Set a timeout to prevent hanging if a peer is unresponsive.
-            socket.setSoTimeout(5000); 
+            socket.setSoTimeout(5000);
 
             // Request protocol: [Filename (UTF)] + [Piece Index (Int)]
             dos.writeUTF(sharedFile.getFilename());
@@ -223,10 +243,11 @@ public class FileDownloader {
                 raf.seek((long) pieceIndex * FileUtil.PIECE_SIZE);
                 raf.write(data);
             }
-            
+
             return true;
         } catch (IOException | NoSuchAlgorithmException e) {
-            System.err.println("Error downloading piece " + pieceIndex + " from " + peer.getUsername() + ": " + e.getMessage());
+            System.err.println(
+                    "Error downloading piece " + pieceIndex + " from " + peer.getUsername() + ": " + e.getMessage());
             return false;
         }
     }

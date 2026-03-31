@@ -1,12 +1,16 @@
 package com.distributed.util;
 
+ 
 /**
- * Utility class for benchmarking tasks such as file downloads.
- * Measures time elapsed and calculates transfer speeds.
+ * Utility class for measuring performance and generating download reports.
+ * Tracks elapsed time and calculates transfer speeds.
  */
 public class Benchmark {
+    /** Start time in milliseconds */
     private long startTime;
+    /** End time in milliseconds */
     private long endTime;
+    /** Name of the task or file being measured */
     private final String taskName;
 
     public Benchmark(String taskName) {
@@ -14,44 +18,39 @@ public class Benchmark {
     }
 
     /**
-     * Starts the timer.
+     * Marks the start of the benchmark.
      */
     public void start() {
         this.startTime = System.currentTimeMillis();
     }
 
     /**
-     * Stops the timer.
+     * Marks the end of the benchmark.
      */
     public void stop() {
         this.endTime = System.currentTimeMillis();
     }
 
-    /**
-     * Returns the duration in milliseconds.
-     */
+     
     public long getDurationMillis() {
         return endTime - startTime;
     }
 
-    /**
-     * Returns the duration in seconds.
-     */
+     
     public double getDurationSeconds() {
         return getDurationMillis() / 1000.0;
     }
 
     /**
-     * Generates a human-readable summary of the benchmark.
-     * 
-     * @param totalBytes The total amount of data processed during the task.
-     * @return A formatted string with size, time, and speed.
+     * Generates a formatted summary of the benchmark results.
+     * @param totalBytes Total amount of data transferred
+     * @return A multi-line string containing the benchmark report
      */
     public String getFormattedSummary(long totalBytes) {
         double durationSeconds = getDurationSeconds();
-        if (durationSeconds <= 0) durationSeconds = 0.001; // Avoid division by zero
+        if (durationSeconds <= 0) durationSeconds = 0.001; 
         
-        double speedVal = totalBytes / durationSeconds; // bytes per second
+        double speedVal = totalBytes / durationSeconds; 
         String speedStr = formatSpeed(speedVal);
         String sizeStr = formatSize(totalBytes);
 

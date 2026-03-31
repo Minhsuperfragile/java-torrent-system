@@ -2,13 +2,29 @@ package com.distributed.model;
 
 import java.io.Serializable;
 
+/**
+ * Represents a peer (user) in the distributed network.
+ * Stores connection information and current system status.
+ */
 public class User implements Serializable {
     private static final long serialVersionUID = 1L;
+
+    /** Unique identifier for the user */
     private String username;
+
+    /** Network address where the peer's FileTransferServer is listening */
     private String ipAddress;
+
+    /** Port number where the peer's FileTransferServer is listening */
     private int port;
-    private int load; // Number of active incoming transfers
-    private long lastHeartbeat; // Timestamp of last check-in
+
+    /**
+     * Current number of active outbound file transfers (used for load balancing)
+     */
+    private int load;
+
+    /** Timestamp of the last heartbeat signal received by the central server */
+    private long lastHeartbeat;
 
     public User(String username, String ipAddress, int port) {
         this.username = username;

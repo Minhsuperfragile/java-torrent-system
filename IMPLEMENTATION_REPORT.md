@@ -23,13 +23,14 @@ When a `PeerDaemon` starts, it must first announce itself to the central authori
 3. **Register User:** It calls the remote method `registerUser(User user)`, passing its current IP and the port where it will listen for TCP file requests.
 
 ```java
-// Logic from PeerDaemon.java
-Registry centralRegistry = LocateRegistry.getRegistry(serverIp, serverPort);
-centralServer = (Server) centralRegistry.lookup(serviceName);
-
-String localIp = InetAddress.getLocalHost().getHostAddress();
-User user = new User(username, localIp, port);
-centralServer.registerUser(user);
+// Logic from PeerDaemon.java: Optimized IP detection
+String localIp = ConfigLoader.get("CLIENT_PUBLIC_IP", "");
+if (localIp.isEmpty()) {
+    // Robust iteration through network interfaces to find non-loopback IPv4
+    localIp = getPrivateIPv4(); 
+}
+localUser = new User(username, localIp, port);
+centralServer.registerUser(localUser);
 ```
 
 ### Phase 2: Metadata Exchange (Publishing)
@@ -133,27 +134,24 @@ Every file is split into fixed-size pieces (e.g., 1MB). Before writing a piece t
 
 The system implements advanced directory features to ensure the peer list remains fresh and downloads are optimized for network conditions.
 
-### A. Heartbeat System (Liveness Detection)
+### A. Heartbeat System (Liveness Detection & Self-Healing)
 To detect "dirty" disconnections where a peer crashes without unregistering, the system uses a **Heartbeat Mechanism**:
-1. **Peers:** Every `PeerDaemon` runs a background thread that sends a small "liveness" signal to the central server every 30 seconds.
+1. **Peers:** Every `PeerDaemon` runs a background thread that sends a small "liveness" signal to the central server every 15 seconds.
 2. **Server:** The `ServerImpl` runs a "Janitor" thread that scans the registry every 30 seconds. If a peer has not sent a heartbeat for more than 90 seconds, it is automatically pruned from the directory.
+3. **Self-Healing:** If the `PeerDaemon` receives a `RemoteException` during heartbeat or publishing (indicating the server has lost its registration metadata), the daemon automatically **self-heals** by re-registering its `localUser` object with the central server.
 
-### B. Load-Aware Peer Selection
-To prevent overloading a single popular peer, the system dynamically balances the download load:
+### B. Optimized Load-Aware Selection
+To prevent overloading a single popular peer while maximizing parallelism, the system uses a **Hybrid Randomized-Least-Load strategy**:
 1. **Load Reporting:** The `FileTransferServer` tracks the number of active incoming connections. Every time a connection starts or ends, it notifies the central server of its current `load`.
-2. **Preference Strategy:** When a `FileDownloader` fetches a peer list, it sorts the peers by their current load (least busy first). The downloader always attempts to connect to the peer with the lowest number of active transfers.
+2. **Preference strategy (Top 5 Pool):** When a `FileDownloader` fetches a peer list, it sorts them by their current load. However, to ensure downloads happen in parallel across multiple clients (e.g. your Port 8080 and Port 8081 clients), it picks a peer **randomly from the top 5 least-loaded nodes**.
+3. **Result:** This ensures we always target the highest-performing nodes while avoiding the "herd effect" where every parallel thread tries to hit the single least-loaded node simultaneously.
 
 ```java
-// Logic from FileDownloader.java
-private void refreshPeers() {
-    if (peerProvider != null) {
-        List<User> updatedPeers = peerProvider.get();
-        if (updatedPeers != null && !updatedPeers.isEmpty()) {
-            // Sort by load (least busy first) to optimize source selection
-            updatedPeers.sort(Comparator.comparingInt(User::getLoad));
-            sourcePeers = new CopyOnWriteArrayList<>(updatedPeers);
-            System.out.println("Peer list refreshed. Now " + sourcePeers.size() + " peers available...");
-        }
-    }
+// Logic from FileDownloader.java: Multi-source selection
+private User getRandomPeer() {
+    List<User> peers = sourcePeers; // Sorted by load
+    int poolSize = Math.min(peers.size(), 5);
+    // Randomly pick from top 5 best candidates to distribute work in parallel
+    return peers.get(random.nextInt(poolSize));
 }
 ```
